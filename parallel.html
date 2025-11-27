@@ -3,15 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>平行板電場模擬</title>
+  <title>平行板電場模擬 (進階版)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <style>
-    /* --- 基礎設定 (與 index.html 相同) --- */
+    /* --- 基礎設定 --- */
     body { 
       margin: 0; overflow: hidden; background: #000; 
       font-family: 'Segoe UI', Arial, sans-serif; 
-      touch-action: none; 
+      touch-action: none; /* 全局禁止縮放與捲動 */
       user-select: none; -webkit-user-select: none;
+    }
+
+    /* --- Safari 滑桿修復關鍵 --- */
+    input[type=range] {
+      touch-action: pan-x !important; /* 允許滑桿水平滑動 */
+      pointer-events: auto;
+      z-index: 1000;
     }
 
     /* --- 側邊選單 --- */
@@ -39,7 +46,6 @@
       transition: background 0.2s;
     }
     .menu-link:hover { background: #333; color: #fff; }
-    /* 設定 active 樣式 */
     .menu-link.active { background: #333; color: #fff; border-left: 4px solid #00ffff; }
 
     #menu-overlay {
@@ -48,12 +54,12 @@
     }
     #menu-overlay.open { display: block; }
 
-    /* --- 頂部控制列 (針對平行板客製化) --- */
+    /* --- 頂部控制列 --- */
     #top-bar {
       position: fixed; top: 0; left: 0; width: 100%;
-      background: rgba(20,20,20,0.9); padding: 10px 0;
+      background: rgba(20,20,20,0.95); padding: 10px 0 15px 0;
       display: flex; flex-direction: column; align-items: center; 
-      gap: 8px; z-index: 100;
+      gap: 5px; z-index: 100;
       backdrop-filter: blur(5px);
       box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     }
@@ -64,14 +70,24 @@
       cursor: pointer; padding: 5px; z-index: 110;
     }
 
-    /* 滑桿控制區 */
-    .slider-container {
-      display: flex; align-items: center; gap: 10px; width: 90%; max-width: 400px;
-      color: #fff; font-size: 14px;
+    /* 滑桿區域 */
+    .slider-group {
+      display: flex; flex-direction: column; gap: 5px;
+      width: 85%; max-width: 400px;
     }
-    .slider-label { width: 80px; text-align: right; }
-    input[type=range] { flex-grow: 1; }
+    .slider-row {
+      display: flex; align-items: center; gap: 10px;
+      color: #ddd; font-size: 13px;
+    }
+    .slider-label { width: 90px; text-align: right; font-weight: bold; }
+    input[type=range] { flex-grow: 1; cursor: pointer; }
+    .val-display { width: 40px; text-align: left; font-family: monospace; }
     
+    /* 顏色標記 */
+    .lbl-top { color: #ff5555; }
+    .lbl-bot { color: #5588ff; }
+    .lbl-dist { color: #aaa; }
+
     /* 底部數據 HUD */
     #hud {
       position: fixed; bottom: 0; left: 0; width: 100%;
@@ -94,10 +110,8 @@
 </head>
 <body>
 
-  <!-- 遮罩層 -->
   <div id="menu-overlay" onclick="toggleMenu()"></div>
 
-  <!-- 側邊選單 -->
   <nav id="side-menu">
     <div class="menu-header">
       <span class="menu-title">物理模擬實驗室</span>
@@ -105,31 +119,41 @@
     </div>
     <div class="menu-items">
       <a href="index.html" class="menu-link">1. 點電荷電場模擬</a>
-      <!-- 當前頁面 active -->
       <a href="parallel.html" class="menu-link active">2. 平行板電場模擬</a>
       <a href="#" class="menu-link" onclick="alert('建置中...')">3. 磁場模擬 (範例)</a>
     </div>
   </nav>
 
-  <!-- 頂部控制列 -->
+  <!-- 頂部控制列 (3個滑桿) -->
   <div id="top-bar">
     <button id="menu-btn" onclick="toggleMenu()">☰</button>
     
-    <div class="slider-container" style="margin-top: 5px;">
-      <span class="slider-label">帶電量 Q</span>
-      <input type="range" id="chargeSlider" min="1" max="10" step="0.5" value="5" oninput="updateParams()">
-      <span id="q-display" style="width: 35px">5C</span>
-    </div>
-    <div class="slider-container">
-      <span class="slider-label">板間距 d</span>
-      <input type="range" id="distSlider" min="50" max="250" step="10" value="150" oninput="updateParams()">
-      <span id="d-display" style="width: 35px">mm</span>
+    <div class="slider-group">
+      <!-- 上板電荷 -->
+      <div class="slider-row">
+        <span class="slider-label lbl-top">上板電荷</span>
+        <input type="range" id="topQSlider" min="-10" max="10" step="1" value="5" oninput="updateParams()">
+        <span id="topQ-val" class="val-display">5C</span>
+      </div>
+      
+      <!-- 下板電荷 -->
+      <div class="slider-row">
+        <span class="slider-label lbl-bot">下板電荷</span>
+        <input type="range" id="botQSlider" min="-10" max="10" step="1" value="-5" oninput="updateParams()">
+        <span id="botQ-val" class="val-display">-5C</span>
+      </div>
+
+      <!-- 板間距 -->
+      <div class="slider-row">
+        <span class="slider-label lbl-dist">板間距 d</span>
+        <input type="range" id="distSlider" min="60" max="250" step="10" value="150" oninput="updateParams()">
+        <span id="d-val" class="val-display">mm</span>
+      </div>
     </div>
   </div>
 
-  <div id="hint">移動滑桿調整參數 | 拖曳黃色準心觀測內部電場</div>
+  <div id="hint">移動滑桿設定參數 | 拖曳黃色準心觀測電場</div>
 
-  <!-- 底部數據 -->
   <div id="hud">
     <div class="hud-item">
       <span class="hud-label">電場強度 E</span>
@@ -144,7 +168,6 @@
   </div>
 
   <script>
-    // --- 選單控制 ---
     function toggleMenu() {
       const menu = document.getElementById('side-menu');
       const overlay = document.getElementById('menu-overlay');
@@ -152,75 +175,81 @@
       overlay.classList.toggle('open');
     }
 
-    // --- 物理模擬參數 ---
-    const PLATE_CHARGES_COUNT = 16; // 每一片板子由多少個點電荷組成
-    const PLATE_WIDTH = 300;        // 板子總長度 (px)
-    const K_CONST = 5000;           // 模擬常數
+    // --- 物理模擬 ---
+    const PLATE_POINTS = 20; // 板子解析度 (組成電荷數量)
+    const PLATE_WIDTH = 320;
+    const K_CONST = 5000;
     
-    // 繪圖與計算變數
-    let plateCharges = []; // 存放所有組成板子的點電荷
+    let plateCharges = [];
     let observer;
     let draggedObj = null;
-    let chargeVal = 5;
-    let plateDist = 150;
     
-    // DOM
-    let eDisplay, vDisplay, qLabel, dLabel;
+    // 參數
+    let qTop = 5;
+    let qBot = -5;
+    let distVal = 150;
+    
+    // DOM Cache
+    let eDisplay, vDisplay, txtTop, txtBot, txtDist;
 
     function setup() {
       createCanvas(windowWidth, windowHeight);
       eDisplay = select('#e-val');
       vDisplay = select('#v-val');
-      qLabel = select('#q-display');
-      dLabel = select('#d-display');
+      txtTop = select('#topQ-val');
+      txtBot = select('#botQ-val');
+      txtDist = select('#d-val');
       
-      observer = new Observer(width/2, height/2); // 觀測點在中間
-      updateParams(); // 初始化板子
+      observer = new Observer(width/2, height/2);
+      updateParams();
     }
 
-    // 當滑桿拉動時呼叫此函式
+    // 更新參數與物理模型
     function updateParams() {
-      chargeVal = parseFloat(select('#chargeSlider').value());
-      plateDist = parseFloat(select('#distSlider').value());
+      qTop = parseFloat(select('#topQSlider').value());
+      qBot = parseFloat(select('#botQSlider').value());
+      distVal = parseFloat(select('#distSlider').value());
       
       // 更新文字顯示
-      qLabel.html(chargeVal + "C");
-      dLabel.html(plateDist/2 + "mm"); // 只是示意單位
+      txtTop.html((qTop > 0 ? "+" : "") + qTop + "C");
+      txtBot.html((qBot > 0 ? "+" : "") + qBot + "C");
+      txtDist.html(distVal/2 + "mm");
 
       rebuildPlates();
     }
 
-    // 重新建立平行板 (將板子視為一排點電荷)
     function rebuildPlates() {
       plateCharges = [];
-      
       let startX = width/2 - PLATE_WIDTH/2;
-      let gap = PLATE_WIDTH / (PLATE_CHARGES_COUNT - 1);
+      let gap = PLATE_WIDTH / (PLATE_POINTS - 1);
       
-      let topY = height/2 - plateDist/2;
-      let bottomY = height/2 + plateDist/2;
+      let topY = height/2 - distVal/2;
+      let botY = height/2 + distVal/2;
 
-      // 每個點電荷分到的電荷量 (總電荷 Q 除以 數量)
-      // 注意：這裡我們讓板子總帶電量 = 滑桿數值
-      let unitQ = chargeVal / PLATE_CHARGES_COUNT * 2; // *2 是為了讓場強視覺效果明顯一點
+      // 計算每個單點的電荷量 (均勻分佈)
+      // 放大係數 *2 是為了讓數值在物理計算上比較有感
+      let unitQTop = qTop / PLATE_POINTS * 2;
+      let unitQBot = qBot / PLATE_POINTS * 2;
 
-      for (let i = 0; i < PLATE_CHARGES_COUNT; i++) {
+      for (let i = 0; i < PLATE_POINTS; i++) {
         let x = startX + i * gap;
-        
-        // 上板 (正電荷)
-        plateCharges.push({ x: x, y: topY, q: unitQ });
-        // 下板 (負電荷)
-        plateCharges.push({ x: x, y: bottomY, q: -unitQ });
+        // 上板電荷
+        if (Math.abs(qTop) > 0.1) 
+          plateCharges.push({ x: x, y: topY, q: unitQTop, isTop: true });
+        // 下板電荷
+        if (Math.abs(qBot) > 0.1) 
+          plateCharges.push({ x: x, y: botY, q: unitQBot, isTop: false });
       }
     }
 
     function draw() {
       background(10);
       
-      // 1. 繪製板子實體 (視覺裝飾)
-      drawPlateVisuals();
+      // 1. 畫板子外觀 (可視化符號)
+      drawPlateVisuals(qTop, height/2 - distVal/2);
+      drawPlateVisuals(qBot, height/2 + distVal/2);
 
-      // 2. 繪製電力線
+      // 2. 畫電力線
       drawFieldLines();
 
       // 3. 觀測點
@@ -228,102 +257,153 @@
       observer.display();
     }
 
-    // --- 視覺繪圖 ---
-    function drawPlateVisuals() {
+    // --- 可視化函數：畫板子與電荷符號 ---
+    function drawPlateVisuals(Q, yPos) {
       rectMode(CENTER);
       noStroke();
       
-      let topY = height/2 - plateDist/2;
-      let bottomY = height/2 + plateDist/2;
+      // 根據電荷正負決定板子顏色
+      if (Q > 0) fill(100, 30, 30);       // 暗紅背景
+      else if (Q < 0) fill(30, 50, 100);  // 暗藍背景
+      else fill(50);                      // 灰色 (中性)
 
-      // 上板 (紅)
-      fill(200, 50, 50);
-      rect(width/2, topY, PLATE_WIDTH + 20, 10, 5);
-      
-      // 下板 (藍)
-      fill(50, 100, 200);
-      rect(width/2, bottomY, PLATE_WIDTH + 20, 10, 5);
+      rect(width/2, yPos, PLATE_WIDTH + 20, 12, 6);
 
-      // 畫電荷符號
-      fill(255); textAlign(CENTER, CENTER); textSize(12); textStyle(BOLD);
-      text("＋ ＋ ＋ ＋ ＋ ＋ ＋ ＋", width/2, topY);
-      text("－ － － － － － － －", width/2, bottomY);
-    }
+      // --- 繪製電荷符號 (密度可視化) ---
+      if (Math.abs(Q) > 0) {
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        textStyle(BOLD);
 
-    function drawFieldLines() {
-      noFill(); strokeWeight(1.5);
-      
-      // 只從上板(正電荷) 發出電力線
-      // 為了效能，不要從每個點都發，每隔幾個點發一條就好
-      let step = 2; // 每隔 2 個電荷畫一條
-      
-      // 找出所有正電荷
-      let positives = plateCharges.filter(c => c.q > 0);
-      
-      for (let i = 0; i < positives.length; i += step) {
-        let p = positives[i];
+        // 決定符號類型
+        let symbol = Q > 0 ? "+" : "−";
         
-        // 每一點發出 2 條線 (稍微錯開角度，營造擴散感)
-        // 中間的點主要向下，邊緣的點會向外
-        let linesPerPoint = 1; 
+        // 決定符號數量 (密度)：絕對值越大，符號越多
+        // map: 0~10C 對應到 1~12 個符號
+        let count = map(Math.abs(Q), 0, 10, 0, 15);
+        count = Math.floor(count);
+        if (count < 1 && Math.abs(Q) > 0) count = 1; // 至少顯示一個
+
+        // 均勻排列符號
+        let spacing = PLATE_WIDTH / (count + 1);
+        let startX = width/2 - PLATE_WIDTH/2;
         
-        for(let k=0; k<linesPerPoint; k++) {
-            let startX = p.x;
-            let startY = p.y + 6; // 從板子下方一點點開始
-            
-            let currX = startX;
-            let currY = startY;
-
-            stroke(255, 255, 255, 60); // 淡白色線
-            beginShape();
-            vertex(currX, currY);
-
-            for (let s = 0; s < 400; s++) { // 步數限制
-                let res = calculateField(currX, currY);
-                
-                // 停止條件：場太弱、出界
-                if (res.E_mag < 0.05 || currX < 0 || currX > width || currY < 0 || currY > height) break;
-
-                // 前進
-                let dx = (res.Ex / res.E_mag) * 5; // step size 5
-                let dy = (res.Ey / res.E_mag) * 5;
-                currX += dx;
-                currY += dy;
-                vertex(currX, currY);
-
-                // 停止條件：碰到下板 (簡單判斷 Y 座標)
-                if (currY >= height/2 + plateDist/2 - 5) break;
-            }
-            endShape();
+        for(let i=1; i<=count; i++){
+          text(symbol, startX + i*spacing, yPos);
         }
+      } else {
+        // 中性
+        fill(150); textSize(12);
+        text("0", width/2, yPos);
       }
     }
 
-    // --- 物理計算 (疊加原理) ---
+    // --- 電力線繪製 (密度可視化) ---
+    function drawFieldLines() {
+      noFill(); strokeWeight(1.5);
+      
+      // 找出所有正電荷 (電力線源頭)
+      // 如果兩板都是負電，則應該從無限遠發出(這裡簡化不畫)
+      // 如果兩板都是正電，則兩板都會發出線
+      let sources = plateCharges.filter(c => c.q > 0);
+      
+      if (sources.length === 0) return;
+
+      // 我們需要根據總電荷量來決定 "抽樣" 畫幾條線
+      // 這樣電荷大時，線條看起來比較密
+      
+      // 設定: 每 1C 的電荷，每隔幾個點畫一條線?
+      // 簡單作法：遍歷所有正電荷點，根據其帶電量機率性畫線
+      
+      for (let p of sources) {
+        // 帶電量越大，畫線機率越高 (模擬密度)
+        // 基礎機率 + 增益
+        // Math.abs(p.q) 大約在 0 ~ 1 之間
+        // 我們希望 10C 時很密 (幾乎每點都畫)，1C 時很疏
+        
+        // 這裡 p.q 是單點電荷量，約等於 TotalQ / 20 * 2
+        // 例如 Q=10C -> p.q = 1.0 -> 應該每點都畫
+        // 例如 Q=1C  -> p.q = 0.1 -> 應該每10點畫一條
+        
+        let drawProb = Math.abs(p.q) * 1.5; 
+        
+        // 隨機數小於機率才畫，或是用固定步長
+        // 為了動畫穩定不閃爍，我們用固定間隔演算法
+        // 但因為 p.q 是浮點數，這裡用取餘數或是累積法比較好
+        // 簡單替代方案：根據 Q 的大小決定 step
+        // Q=10 -> step=1, Q=5 -> step=2, Q=1 -> step=10
+        
+      }
+      
+      // 改用更穩定的迴圈法：
+      // 總電荷 Q_total 決定總線條數
+      // 假設每 1C 對應 3 條線 (全板總共)
+      
+      // 針對上板正電荷
+      if (qTop > 0) drawLinesFromPlate(true, qTop);
+      // 針對下板正電荷 (如果是正的話)
+      if (qBot > 0) drawLinesFromPlate(false, qBot);
+    }
+
+    function drawLinesFromPlate(isTopPlate, totalQ) {
+      let yPos = isTopPlate ? (height/2 - distVal/2 + 5) : (height/2 + distVal/2 + 5);
+      let direction = isTopPlate ? 1 : -1; // 初始發射方向微調
+      
+      // 線條總數 (密度)
+      let numLines = Math.floor(Math.abs(totalQ) * 5); // 10C -> 50條線
+      numLines = constrain(numLines, 2, 60); // 效能限制
+
+      for(let i=0; i<numLines; i++) {
+        // 均勻分佈起始點 x
+        let x = map(i, 0, numLines-1, width/2 - PLATE_WIDTH/2 + 5, width/2 + PLATE_WIDTH/2 - 5);
+        
+        // 開始畫線
+        let currX = x;
+        let currY = yPos;
+        
+        stroke(255, 255, 255, 70);
+        beginShape();
+        vertex(currX, currY);
+
+        for (let s = 0; s < 400; s++) {
+            let res = calculateField(currX, currY);
+            if (res.E_mag < 0.05 || currX < 0 || currX > width || currY < 0 || currY > height) break;
+            
+            let dx = (res.Ex / res.E_mag) * 6;
+            let dy = (res.Ey / res.E_mag) * 6;
+            currX += dx;
+            currY += dy;
+            vertex(currX, currY);
+            
+            // 撞擊判定 (撞到任何負電荷板)
+            let hit = false;
+            // 檢查是否撞到上板 (且上板是負電)
+            if (qTop < 0 && Math.abs(currY - (height/2 - distVal/2)) < 8 && Math.abs(currX - width/2) < PLATE_WIDTH/2) hit = true;
+            // 檢查是否撞到下板 (且下板是負電)
+            if (qBot < 0 && Math.abs(currY - (height/2 + distVal/2)) < 8 && Math.abs(currX - width/2) < PLATE_WIDTH/2) hit = true;
+            
+            if (hit) break;
+        }
+        endShape();
+      }
+    }
+
     function calculateField(x, y) {
       let Ex = 0, Ey = 0, V = 0;
-      
-      // 雖然是平行板，但我們用 "多個點電荷疊加" 來模擬，
-      // 這樣可以自動產生正確的邊緣效應 (Fringing field)
       for (let c of plateCharges) {
         let dx = x - c.x;
         let dy = y - c.y;
         let dSq = dx*dx + dy*dy;
-        // 避免除以零，且設定一個最小距離以避免數值爆炸
         let d = sqrt(dSq);
-        if (d < 5) d = 5; 
-        dSq = max(dSq, 25);
-
+        if (d < 5) d = 5; dSq = max(dSq, 25);
         let E = (K_CONST * c.q) / dSq;
-        Ex += E * (dx / d);
-        Ey += E * (dy / d);
-        
+        Ex += E * (dx / d); Ey += E * (dy / d);
         V += (K_CONST * c.q) / d / 10;
       }
       return { Ex, Ey, E_mag: sqrt(Ex*Ex + Ey*Ey), V };
     }
 
-    // --- 觀測點 (與 index.html 相同邏輯) ---
     class Observer {
       constructor(x, y) { this.x = x; this.y = y; }
       update() {
@@ -333,17 +413,13 @@
         vDisplay.html(res.V.toFixed(2));
       }
       display() {
-        // 準心
         stroke('#ffe600'); strokeWeight(2); noFill();
         ellipse(this.x, this.y, 24);
         line(this.x-16, this.y, this.x+16, this.y);
         line(this.x, this.y-16, this.x, this.y+16);
-
-        // 向量
         let len = mag(this.Ex, this.Ey);
         if (len > 0.01) {
           push(); translate(this.x, this.y); rotate(atan2(this.Ey, this.Ex));
-          // 這裡的 scale 可以調整，讓平行板內部的箭頭長度適中
           let displayLen = constrain(len * 60, 20, 100); 
           stroke('#00FFFF'); strokeWeight(4); line(0, 0, displayLen, 0);
           noFill(); line(displayLen, 0, displayLen - 12, -8); line(displayLen, 0, displayLen - 12, 8);
@@ -352,9 +428,9 @@
       }
     }
 
-    // --- 互動 ---
+    // --- 互動控制 (Safari Fix) ---
     function isTouchingUI(e) {
-      // 排除滑桿、按鈕、選單
+      // 關鍵：如果是 input range，回傳 true 讓瀏覽器處理，不要讓 p5 攔截
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#side-menu')) return true;
       return false;
     }
@@ -363,10 +439,7 @@
     function mousePressed(e) { if(isTouchingUI(e)) return true; handleStart(); }
 
     function handleStart() {
-      // 平行板模式下，只有觀測點可以拖曳，板子是用滑桿控制
-      if (dist(mouseX, mouseY, observer.x, observer.y) < 50) {
-        draggedObj = observer;
-      }
+      if (dist(mouseX, mouseY, observer.x, observer.y) < 50) draggedObj = observer;
     }
 
     function touchMoved() { handleMove(); return false; }
@@ -375,17 +448,13 @@
     function handleMove() {
       if (draggedObj) {
         draggedObj.x = constrain(mouseX, 10, width-10);
-        draggedObj.y = constrain(mouseY, 80, height-80); // 避開UI
+        draggedObj.y = constrain(mouseY, 140, height-80); // 避開上方滑桿區
       }
     }
 
     function touchEnded() { draggedObj = null; }
     function mouseReleased() { draggedObj = null; }
-
-    function windowResized() { 
-        resizeCanvas(windowWidth, windowHeight); 
-        updateParams(); // 重繪板子位置
-    }
+    function windowResized() { resizeCanvas(windowWidth, windowHeight); updateParams(); }
   </script>
 </body>
 </html>
