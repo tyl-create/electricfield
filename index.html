@@ -2,243 +2,375 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>電場與電位視覺化</title>
-  <!-- 引入 p5.js -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>電場觀測實驗室</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <style>
-    /* 網頁樣式設定 */
+    /* 基礎設定：禁止手機選取與捲動 */
     body { 
       margin: 0; 
-      overflow: hidden; /* 防止捲動 */
+      overflow: hidden; 
       background: #000; 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      touch-action: none; /* 關鍵：禁止手機下拉重整，讓手指可以專心拖曳 */
+      font-family: 'Segoe UI', sans-serif;
+      touch-action: none; 
+      -webkit-user-select: none;
+      user-select: none;
     }
 
-    /* 上方控制面板 */
-    #ui-container {
-      position: absolute;
+    /* 頂部按鈕列 */
+    #top-bar {
+      position: fixed;
       top: 0; left: 0; width: 100%;
-      background: rgba(20, 20, 20, 0.85);
-      padding: 12px 0;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 0;
       display: flex;
       justify-content: center;
-      gap: 15px;
-      backdrop-filter: blur(4px);
-      z-index: 100;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      gap: 10px;
+      z-index: 20;
+      backdrop-filter: blur(5px);
     }
 
     button {
-      padding: 10px 20px;
+      padding: 8px 16px;
       border: none;
-      border-radius: 25px;
-      font-size: 16px;
+      border-radius: 20px;
+      font-size: 14px;
       font-weight: bold;
       color: white;
-      cursor: pointer;
-      transition: transform 0.1s;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     }
     
-    button:active { transform: scale(0.95); }
-    .btn-pos { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
-    .btn-neg { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
-    .btn-clear { background: #555; font-size: 14px; }
+    .btn-pos { background: linear-gradient(135deg, #ff512f, #dd2476); }
+    .btn-neg { background: linear-gradient(135deg, #1fa2ff, #12d8fa); }
+    .btn-reset { background: #444; border: 1px solid #666; }
 
-    /* 下方圖例說明 */
-    #legend {
-      position: absolute;
-      bottom: 10px; left: 10px;
-      color: rgba(255,255,255,0.7);
+    /* 底部數據儀表板 (HUD) */
+    #hud-panel {
+      position: fixed;
+      bottom: 0; 
+      left: 0; 
+      width: 100%;
+      background: rgba(20, 20, 20, 0.9);
+      border-top: 1px solid #444;
+      padding: 15px 20px;
+      box-sizing: border-box;
+      color: #fff;
+      z-index: 20;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .data-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .data-label {
       font-size: 12px;
-      pointer-events: none; /* 讓點擊穿透圖例 */
-      background: rgba(0,0,0,0.5);
-      padding: 5px;
-      border-radius: 5px;
+      color: #aaa;
+      margin-bottom: 2px;
+    }
+
+    .data-value {
+      font-size: 18px;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+    }
+
+    #e-val { color: #ffe600; } /* 黃色對應觀測點 */
+    #v-val { color: #fff; }
+
+    /* 提示文字 */
+    #hint {
+      position: absolute;
+      top: 60px;
+      width: 100%;
+      text-align: center;
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
 
-  <!-- 控制按鈕區 -->
-  <div id="ui-container">
-    <button class="btn-pos" onclick="addCharge(1)">＋正電荷</button>
-    <button class="btn-neg" onclick="addCharge(-1)">－負電荷</button>
-    <button class="btn-clear" onclick="clearCharges()">重置</button>
+  <!-- 上方控制區 -->
+  <div id="top-bar">
+    <button class="btn-pos" onclick="addCharge(1)">+Q</button>
+    <button class="btn-neg" onclick="addCharge(-1)">-Q</button>
+    <button class="btn-reset" onclick="resetSim()">重置</button>
   </div>
 
-  <!-- 圖例 -->
-  <div id="legend">
-    顏色：紅(高電位) ↔ 藍(低電位)<br>
-    箭頭：電場方向與強度
+  <div id="hint">拖動紅藍球改變電場，拖動黃色準心觀測數值</div>
+
+  <!-- 下方數據儀表板 -->
+  <div id="hud-panel">
+    <div class="data-group">
+      <span class="data-label">電場強度 |E|</span>
+      <span id="e-val" class="data-value">0.00</span>
+    </div>
+    <div class="data-group">
+      <span class="data-label">電位 V</span>
+      <span id="v-val" class="data-value">0.00</span>
+    </div>
   </div>
 
   <script>
-    let charges = []; // 存放所有電荷的陣列
-    let draggedCharge = null; // 目前正在拖曳的電荷
-    const gridSize = 25; // 向量場的解析度 (數值越小畫越細，但手機會卡)
+    let charges = [];
+    let observer; // 觀測點
+    let draggedObj = null;
+    const GRID_GAP = 20; // 網格密度
     
-    // 預設放入一正一負，形成偶極子
+    // HTML 元素快取
+    let eDisplay, vDisplay;
+
     function setup() {
       createCanvas(windowWidth, windowHeight);
-      charges.push(new Charge(width / 2 - 100, height / 2, 1));
-      charges.push(new Charge(width / 2 + 100, height / 2, -1));
+      
+      // 初始化 DOM 元素
+      eDisplay = select('#e-val');
+      vDisplay = select('#v-val');
+
+      // 預設場景：一正一負
+      charges.push(new Charge(width * 0.35, height / 2, 1));
+      charges.push(new Charge(width * 0.65, height / 2, -1));
+
+      // 初始化觀測點在畫面中央
+      observer = new Observer(width / 2, height / 2 - 100);
     }
 
     function draw() {
       background(10); // 深色背景
 
-      // 1. 繪製電場向量場
-      drawField();
+      // 1. 繪製電場線 (背景層)
+      drawFieldLines();
 
-      // 2. 繪製並更新電荷
+      // 2. 繪製電荷 (來源層)
       for (let c of charges) {
         c.display();
       }
+
+      // 3. 繪製並更新觀測點 (最上層)
+      observer.update();
+      observer.display();
     }
 
-    // --- 物理計算核心 ---
-    
-    function drawField() {
-      // 遍歷畫面上的網格點
-      for (let x = 0; x <= width; x += gridSize) {
-        for (let y = 0; y <= height; y += gridSize) {
+    // --- 核心物理繪圖 ---
+
+    function drawFieldLines() {
+      strokeWeight(1.5); // 線條稍微加粗
+
+      for (let x = 0; x < width; x += GRID_GAP) {
+        for (let y = 0; y < height; y += GRID_GAP) {
           
-          let Ex = 0, Ey = 0; // 電場分量
-          let V = 0;          // 電位
+          // 計算該網格點的物理量
+          let res = calculatePhysics(x, y);
+          let E_mag = res.E_mag;
+          let V = res.V;
+          let Ex = res.Ex;
+          let Ey = res.Ey;
 
-          // 加總所有電荷對此點的影響
-          for (let c of charges) {
-            let dx = x - c.x;
-            let dy = y - c.y;
-            let dSq = dx*dx + dy*dy;
-            let d = sqrt(dSq);
-            
-            if (d < 10) continue; // 避免除以零或太靠近中心
+          // 優化：如果電場極小，就不畫，節省效能並保持畫面乾淨
+          if (E_mag < 0.1) continue;
 
-            // 電場 E = k * q / r^2 (向量疊加)
-            // 這裡省略 k 常數，僅做相對比較
-            let E = c.q / dSq * 5000; 
-            Ex += E * (dx / d);
-            Ey += E * (dy / d);
+          push();
+          translate(x, y);
+          
+          // 旋轉至電場方向
+          rotate(atan2(Ey, Ex));
 
-            // 電位 V = k * q / r (純量疊加)
-            V += c.q / d * 500; 
-          }
+          // --- 視覺化邏輯 ---
+          
+          // A. 顏色代表電位 (紅=高, 藍=低)
+          // 將電位 V 映射到 0~1 之間 (這裡數值範圍需根據 k 常數微調)
+          let colorNorm = map(V, -3, 3, 0, 1, true);
+          let c1 = color(30, 100, 255); // 深藍
+          let c2 = color(255, 50, 50);  // 深紅
+          let lineCol = lerpColor(c1, c2, colorNorm);
 
-          // 繪製箭頭
-          let len = sqrt(Ex*Ex + Ey*Ey);
-          if (len > 0) {
-            push();
-            translate(x, y);
-            rotate(atan2(Ey, Ex)); // 旋轉到合成電場方向
+          // B. 透明度代表場強 (模擬密度感)
+          // 場越強，透明度越高 (越亮)；場弱則半透明
+          // 使用非線性映射 (sqrt) 讓中等場強也能被看見
+          let alpha = map(sqrt(E_mag), 0, 4, 30, 255, true);
+          lineCol.setAlpha(alpha);
+          
+          stroke(lineCol);
 
-            // 限制箭頭最大長度，避免畫面太亂
-            let displayLen = constrain(len, 5, gridSize * 0.8);
-            
-            // 根據「電位 V」決定顏色
-            // 正電位 -> 紅色, 負電位 -> 藍色
-            let colorVal = constrain(map(V, -5, 5, 0, 1), 0, 1);
-            let c1 = color(50, 100, 255); // 藍
-            let c2 = color(255, 50, 50);  // 紅
-            let arrowColor = lerpColor(c1, c2, colorVal);
-            
-            // 根據場強設定透明度 (場越強越亮)
-            let alpha = constrain(map(len, 0, 50, 50, 255), 50, 255);
-            arrowColor.setAlpha(alpha);
+          // C. 線條長度
+          // 畫出一條短線段，讓它看起來像連續的流線
+          // 稍微重疊一點點 (GRID_GAP + 5) 可以製造連續感
+          line(-GRID_GAP/2, 0, GRID_GAP/2 + 2, 0);
 
-            stroke(arrowColor);
-            strokeWeight(1.5);
-            
-            // 畫箭頭
-            line(-displayLen/2, 0, displayLen/2, 0);
-            line(displayLen/2, 0, displayLen/2 - 3, -3);
-            line(displayLen/2, 0, displayLen/2 - 3, 3);
-            
-            pop();
-          }
+          pop();
         }
       }
     }
 
-    // --- 電荷類別 ---
+    // --- 物理計算函式 (共用) ---
+    // 輸入座標 (x,y)，回傳 {Ex, Ey, E_mag, V}
+    function calculatePhysics(x, y) {
+      let Ex = 0, Ey = 0, V = 0;
+      let k = 5000; // 模擬用的庫倫常數
+      let k_pot = 500; // 電位顯示用的係數
+
+      for (let c of charges) {
+        let dx = x - c.x;
+        let dy = y - c.y;
+        let dSq = dx*dx + dy*dy;
+        let d = sqrt(dSq);
+        
+        // 避免分母為零
+        d = max(d, 10); 
+        dSq = max(dSq, 100);
+
+        // 電場疊加 (向量)
+        let E = (k * c.q) / dSq;
+        Ex += E * (dx / d);
+        Ey += E * (dy / d);
+
+        // 電位疊加 (純量)
+        V += (k_pot * c.q) / d;
+      }
+      
+      let E_mag = sqrt(Ex*Ex + Ey*Ey);
+      return { Ex, Ey, E_mag, V };
+    }
+
+    // --- 類別定義 ---
+
     class Charge {
       constructor(x, y, q) {
         this.x = x;
         this.y = y;
-        this.q = q; // +1 為正電荷, -1 為負電荷
+        this.q = q;
+      }
+      display() {
+        noStroke();
+        // 光暈效果
+        for(let i=20; i>0; i-=5){
+            fill(this.q>0 ? 'rgba(255,50,50,0.1)' : 'rgba(50,100,255,0.1)');
+            ellipse(this.x, this.y, 30 + i);
+        }
+        
+        // 實體球
+        fill(this.q > 0 ? '#ff3333' : '#3388ff');
+        ellipse(this.x, this.y, 30);
+        
+        // 文字符號
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(18);
+        text(this.q > 0 ? "+Q" : "-Q", this.x, this.y);
+      }
+    }
+
+    class Observer {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+      }
+
+      update() {
+        // 計算所在位置的物理量
+        let data = calculatePhysics(this.x, this.y);
+        
+        // 更新 HTML 介面 (toFixed 取小數點兩位)
+        eDisplay.html(data.E_mag.toFixed(2));
+        vDisplay.html(data.V.toFixed(2));
+
+        // 儲存當前場向量供繪圖用
+        this.Ex = data.Ex;
+        this.Ey = data.Ey;
       }
 
       display() {
-        noStroke();
-        if (this.q > 0) fill(255, 50, 50); // 紅色正電
-        else fill(50, 100, 255);           // 藍色負電
-        
-        ellipse(this.x, this.y, 40); // 畫圓球
+        // 1. 畫準心 (黃色)
+        stroke('#ffe600');
+        strokeWeight(2);
+        noFill();
+        ellipse(this.x, this.y, 20); // 圓圈
+        line(this.x - 15, this.y, this.x + 15, this.y); // 十字橫線
+        line(this.x, this.y - 15, this.x, this.y + 15); // 十字直線
 
-        // 畫符號
-        fill(255);
-        textAlign(CENTER, CENTER);
-        textSize(20);
-        text(this.q > 0 ? "+" : "−", this.x, this.y);
+        // 2. 畫該點的電場向量箭頭
+        let vecLen = mag(this.Ex, this.Ey);
+        if (vecLen > 0.5) {
+          push();
+          translate(this.x, this.y);
+          rotate(atan2(this.Ey, this.Ex));
+          
+          stroke('rgba(255, 230, 0, 0.8)');
+          strokeWeight(3);
+          
+          // 限制箭頭最大長度，避免凸出畫面
+          let arrowLen = constrain(vecLen * 2, 0, 80);
+          line(0, 0, arrowLen, 0);
+          
+          // 箭頭頂端
+          noFill();
+          line(arrowLen, 0, arrowLen - 8, -5);
+          line(arrowLen, 0, arrowLen - 8, 5);
+          pop();
+        }
       }
     }
 
-    // --- 互動控制 ---
+    // --- 互動控制 (支援多點觸控邏輯) ---
 
-    // 按下時偵測是否選中電荷
-    function touchStarted() {
-      checkDrag();
-      return false; // 防止預設行為
-    }
-    function mousePressed() {
-      checkDrag();
-    }
+    function touchStarted() { handleInputStart(); return false; }
+    function mousePressed() { handleInputStart(); }
 
-    function checkDrag() {
+    function handleInputStart() {
+      // 優先檢查是否點到「觀測點」
+      let dObs = dist(mouseX, mouseY, observer.x, observer.y);
+      if (dObs < 30) {
+        draggedObj = observer;
+        return;
+      }
+
+      // 再檢查是否點到「電荷」
       for (let c of charges) {
         let d = dist(mouseX, mouseY, c.x, c.y);
         if (d < 30) {
-          draggedCharge = c;
+          draggedObj = c;
           break;
         }
       }
     }
 
-    // 拖曳時更新位置
-    function touchMoved() {
-      if (draggedCharge) {
-        draggedCharge.x = mouseX;
-        draggedCharge.y = mouseY;
-      }
-      return false;
-    }
-    function mouseDragged() {
-      if (draggedCharge) {
-        draggedCharge.x = mouseX;
-        draggedCharge.y = mouseY;
+    function touchMoved() { handleInputMove(); return false; }
+    function mouseDragged() { handleInputMove(); }
+
+    function handleInputMove() {
+      if (draggedObj) {
+        // 邊界限制，防止拖出畫面
+        draggedObj.x = constrain(mouseX, 20, width - 20);
+        draggedObj.y = constrain(mouseY, 60, height - 80); // 避開上下UI
       }
     }
 
-    // 放開時停止拖曳
-    function touchEnded() { draggedCharge = null; }
-    function mouseReleased() { draggedCharge = null; }
+    function touchEnded() { draggedObj = null; }
+    function mouseReleased() { draggedObj = null; }
 
-    // 視窗改變大小時重設畫布
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
+      // 重置位置避免跑版
+      if(observer.y > height) observer.y = height/2;
     }
 
     // --- 按鈕功能 ---
     function addCharge(q) {
-      // 在畫面中心隨機位置新增
-      charges.push(new Charge(width/2 + random(-50,50), height/2 + random(-50,50), q));
+      charges.push(new Charge(width/2 + random(-20,20), height/2 + random(-20,20), q));
+    }
+    
+    function resetSim() {
+      charges = [];
+      setup(); // 重新初始化
     }
 
-    function clearCharges() {
-      charges = [];
-    }
   </script>
 </body>
 </html>
