@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>圓周運動模擬</title>
+  <!-- 引入 p5.js 函式庫 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; font-family: sans-serif; }
+    #controls { padding: 10px; background: white; width: 100%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+    label { margin-right: 10px; font-size: 14px; }
+    /* 讓 Canvas 在手機上也不會跑版 */
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- 控制面板 -->
+  <div id="controls">
+    <h3>圓周運動模擬</h3>
+    <div>
+      <label>半徑 (Radius): <span id="rVal">100</span></label>
+      <input type="range" id="radiusSlider" min="10" max="150" value="100">
+    </div>
+    <div>
+      <label>速度 (Speed): <span id="sVal">0.05</span></label>
+      <input type="range" id="speedSlider" min="0.01" max="0.2" step="0.01" value="0.05">
+    </div>
+  </div>
+
+  <!-- 這裡會自動插入動畫畫布 -->
+
+  <script>
+    let radiusSlider, speedSlider;
+    let angle = 0;
+
+    function setup() {
+      // 建立畫布，寬度隨視窗大小調整 (手機適配關鍵)
+      createCanvas(windowWidth, windowHeight - 150);
+      
+      // 獲取 HTML 裡的滑桿元素
+      radiusSlider = select('#radiusSlider');
+      speedSlider = select('#speedSlider');
+    }
+
+    function draw() {
+      background(240); // 背景色
+      
+      // 獲取當前滑桿數值
+      let r = float(radiusSlider.value());
+      let speed = float(speedSlider.value());
+      
+      // 更新顯示數值
+      select('#rVal').html(r);
+      select('#sVal').html(speed);
+
+      // 移動原點到畫面中心
+      translate(width / 2, height / 2);
+
+      // 計算球的位置 (極座標轉笛卡兒座標)
+      let x = r * cos(angle);
+      let y = r * sin(angle);
+
+      // 畫出軌跡圓
+      noFill();
+      stroke(200);
+      ellipse(0, 0, r * 2);
+
+      // 畫出中心點
+      fill(0);
+      ellipse(0, 0, 5);
+
+      // 畫出連線
+      stroke(0);
+      line(0, 0, x, y);
+
+      // 畫出運動的球
+      fill(255, 0, 0); // 紅色
+      noStroke();
+      ellipse(x, y, 20);
+
+      // 更新角度，產生動畫
+      angle += speed;
+    }
+
+    // 當視窗大小改變時（例如手機旋轉），重新調整畫布大小
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight - 150);
+    }
+  </script>
+</body>
+</html>
